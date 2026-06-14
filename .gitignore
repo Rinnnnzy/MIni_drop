@@ -1,0 +1,36 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# C++ build
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.exe
+
+# Go
+apiserver/bin/
+*.test
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node / React
+node_modules/
+web_frontend/build/
+web_frontend/dist/
+
+# Docker
+.env
+
+# OS
+.DS_Store
+Thumbs.db
