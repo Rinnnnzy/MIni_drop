@@ -34,3 +34,4 @@ web_frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+apiserver/apiserver.yaml
