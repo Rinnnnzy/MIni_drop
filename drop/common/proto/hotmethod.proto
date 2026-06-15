@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package hotmethod;
+
+option go_package = "minidrop/proto/hotmethod";
+
+import "common.proto";
+import "google/protobuf/empty.proto";
+
+// Hotmethod 服务：负责任务下发和结果回报。
+// Collect 由 Server 主动推送给 Agent（同步下发，备用路径）。
+// NotifyResult 由 Agent 在采集完成后主动上报给 Server。
+service Hotmethod {
+  rpc Collect(Target)          returns (google.protobuf.Empty);
+  rpc NotifyResult(TaskResult) returns (google.protobuf.Empty);
+}
+
+// TaskDesc 完整描述一个采集任务，由 Server 通过心跳响应下发给 Agent。
+message TaskDesc {
+  string         task_id       = 1; // 全局唯一任务 ID，由 apiserver 生成
+  uint32         task_type     = 2; // 任务类型：0=通用CPU / 1=Java / 2=Tracing / 4=内存 / 6=JavaHeap
+  uint32         profiler_type = 3; // 采集器类型：0=perf / 1=async-profiler / 2=pprof
+  RecordArgv     sample_argv   = 4; // 采样参数
+  string         container_name = 5; // 容器或 Pod 名称（非容器场景留空）
+  uint32         container_type = 6; // 容器类型：0=无 / 1=Docker / 2=K8s Pod
+  uint32         timeout_sec   = 7; // 任务超时秒数，超时后 Agent 强制终止子进程
+  drop.CosConfig cos_config    = 8; // 对象存储凭证，Agent 用它上传结果
+  string         script_content = 9; // 仅 ScriptExec 任务使用，其他任务留空
+}
+
+// RecordArgv 是传给 perf / async-profiler / pprof 等工具的采样参数。
+message RecordArgv {
+  uint32 hz         = 1; // 采样频率（Hz），例如 99
+  uint64 duration   = 2; // 采集时长（秒），例如 30
+  int32  pid        = 3; // 目标进程 PID，-1 表示全系统采样
+  string callgraph  = 4; // 调用图模式：fp（帧指针）/ dwarf / lbr
+  bool   subprocess = 5; // 是否同时采集目标进程的子进程
+  string event      = 6; // 采样事件，例如 cpu-cycles / cache-misses（留空用默认）
+}
+
+// Target 是 Collect RPC 的请求体，指定采集目标。
+message Target {
+  string    task_id   = 1;
+  TaskDesc  task_desc = 2;
+}
+
+// TaskResult 是 Agent 采集完成后上报的结果。
+message TaskResult {
+  string             task_id         = 1; // 对应的任务 ID
+  string             error_message   = 2; // 空字符串表示成功，否则为错误原因
+  drop.File          file            = 3; // 内联小文件（结果较小时使用）
+  string             cos_key         = 4; // 对象存储路径，例如 /tid/perf.data
+  repeated drop.PidStats self_pstats     = 5; // Agent 自身的资源历史（时序）
+  repeated drop.PidStats children_pstats = 6; // 子进程的资源历史（时序）
+}

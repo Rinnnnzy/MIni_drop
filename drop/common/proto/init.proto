@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package init_svc;
+
+option go_package = "minidrop/proto/init_svc";
+
+import "common.proto";
+
+// InitAgentInfo 服务：Agent 启动时调用一次，完成注册并获取存储凭证。
+// 之后 Agent 凭借拿到的 CosConfig 上传采集结果。
+service InitAgentInfo {
+  rpc RegisterAgent(RegisterAgentRequest) returns (RegisterAgentResponse);
+  rpc FetchConfig(FetchConfigRequest)     returns (FetchConfigResponse);
+}
+
+// RegisterAgent：Agent 首次启动时向 Server 注册自己。
+// Server 把 Agent 信息写入数据库，Web 上的 Agent 列表即来自这里。
+message RegisterAgentRequest {
+  string host_name     = 1; // 主机名
+  string ip_addr       = 2; // Agent IP 地址
+  string uid           = 3; // Agent 唯一 ID（随机生成，重启不变）
+  string agent_version = 4; // Agent 版本号
+  string environment   = 5; // 运行环境描述，例如 "ubuntu22.04-docker"
+}
+
+message RegisterAgentResponse {
+  bool   success = 1;
+  string message = 2; // 失败时的原因
+}
+
+// FetchConfig：Agent 注册成功后拉取对象存储凭证。
+// 返回的 CosConfig 用于后续上传 perf.data 等采集结果。
+message FetchConfigRequest {
+  string uid = 1; // Agent 唯一 ID，用于校验身份
+}
+
+message FetchConfigResponse {
+  bool            success    = 1;
+  drop.CosConfig  cos_config = 2; // 对象存储凭证
+  string          message    = 3; // 失败时的原因
+}

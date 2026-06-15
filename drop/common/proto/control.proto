@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package control;
+
+option go_package = "minidrop/proto/control";
+
+import "hotmethod.proto";
+
+// Control 服务：apiserver 调用 drop_server 的控制面接口。
+// apiserver 通过这3个 RPC 下发任务、查询结果、查询 Agent 状态。
+service Control {
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  rpc FetchData(FetchDataRequest)   returns (FetchDataResponse);
+  rpc StatAgent(StatAgentRequest)   returns (StatAgentResponse);
+}
+
+// CreateTask：apiserver 向 drop_server 下发一个新任务。
+// drop_server 把 TaskDesc 放进对应 Agent IP 的任务队列，等 Agent 心跳时取走。
+message CreateTaskRequest {
+  string            target_ip = 1; // 目标 Agent 的 IP 地址
+  string            service   = 2; // 服务名，固定填 "hotmethod"
+  hotmethod.TaskDesc task_desc = 3; // 完整的任务描述
+}
+
+message CreateTaskResponse {
+  bool   success = 1;
+  string message = 2; // 失败时的原因描述
+}
+
+// FetchData：apiserver 查询某个任务的采集结果（cos_key）。
+message FetchDataRequest {
+  string task_id = 1;
+}
+
+message FetchDataResponse {
+  bool   success       = 1;
+  string cos_key       = 2; // 结果文件在对象存储中的路径
+  string error_message = 3; // 失败时的原因
+}
+
+// StatAgent：apiserver 查询某个 Agent 当前的资源占用情况。
+// 用于前端 "Agent 详情" 页面的实时资源展示。
+message StatAgentRequest {
+  string ip_addr = 1; // 要查询的 Agent IP
+}
+
+message StatAgentResponse {
+  bool   online         = 1; // Agent 是否在线
+  float  cpu_percent    = 2; // Agent 进程当前 CPU 使用率
+  uint64 rss_kb         = 3; // Agent 进程当前内存占用（KB）
+  string last_heartbeat = 4; // 最后一次心跳时间（RFC3339 格式）
+}

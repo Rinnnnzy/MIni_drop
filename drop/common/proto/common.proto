@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package drop;
+
+option go_package = "minidrop/proto/drop";
+
+// PidStats 描述一个进程在某一采样区间内的资源使用情况。
+// Agent 把自身和子进程的指标填进来，随心跳上报给 Server。
+message PidStats {
+  int32  pid         = 1; // 进程 ID
+  float  cpu_percent = 2; // 1秒区间内 CPU 使用率（0.0 ~ 核心数*100）
+  uint64 rss_kb      = 3; // 常驻内存 RSS，单位 KB
+  uint64 read_kb     = 4; // 1秒区间内磁盘读取量，单位 KB/s
+  uint64 write_kb    = 5; // 1秒区间内磁盘写入量，单位 KB/s
+}
+
+// File 用于内联传输小文件（通常小于 1MB）。
+// 大文件走对象存储，只传 cosKey。
+message File {
+  string filename = 1; // 文件名
+  bytes  content  = 2; // 文件内容（二进制）
+}
+
+// CosConfig 是对象存储的访问凭证。
+// Server 通过 InitAgentInfoService 下发给 Agent，Agent 用它上传采集结果。
+message CosConfig {
+  string endpoint   = 1; // 存储服务地址，例如 http://minio:9000
+  string bucket     = 2; // 桶名，例如 drop
+  string access_key = 3; // 访问密钥 ID
+  string secret_key = 4; // 访问密钥 Secret
+  bool   use_ssl    = 5; // 是否使用 HTTPS
+}

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package drop;
+
+option go_package = "minidrop/proto/drop";
+
+import "common.proto";
+import "hotmethod.proto";
+
+// HealthCheck 服务：Agent 每 5 秒调用一次 Do()。
+// Server 用心跳维护 Agent 在线状态；响应中可携带待执行的任务。
+service HealthCheck {
+  rpc Do(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message HealthCheckRequest {
+  string   host_name        = 1; // 主机名，例如 worker-01
+  string   ip_addr          = 2; // Agent 所在机器的 IP 地址
+  string   uid              = 3; // Agent 自己的唯一 ID（启动时生成一次）
+  string   agent_version    = 4; // Agent 版本号，便于运维排查
+  PidStats self_pstats      = 5; // Agent 进程自身的资源占用
+  PidStats children_pstats  = 6; // Agent 启动的所有子进程（perf 等）的聚合资源占用
+}
+
+message HealthCheckResponse {
+  // ServingStatus 表示 Server 当前是否正常服务
+  enum ServingStatus {
+    UNKNOWN     = 0;
+    SERVING     = 1;
+    NOT_SERVING = 2;
+  }
+
+  ServingStatus          status    = 1; // Server 状态
+  bool                   pending   = 2; // 是否有任务待执行，true 时 task_desc 有效
+  hotmethod.TaskDesc     task_desc = 3; // 待执行的任务描述（pending=false 时忽略）
+}
