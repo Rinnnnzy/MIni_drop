@@ -19,9 +19,11 @@ public:
   static void Warn(const std::string& msg);
   static void Error(const std::string& msg);
 
-private:
+  // Level 放在 public：Log.cpp 里的辅助函数（LevelName/ParseLevel）是类外部的
+  // 自由函数，需要能引用这个类型；私有嵌套类型在类外部访问不到，编译会报错。
   enum class Level { DEBUG, INFO, WARN, ERROR };
 
+private:
   static void Write(Level level, const std::string& msg);
   static Level min_level_;
 };
