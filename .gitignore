@@ -36,3 +36,4 @@ web_frontend/dist/
 Thumbs.db
 apiserver/apiserver.yaml
 ~$项目学习笔记.docx
+drop/etc/config.json
