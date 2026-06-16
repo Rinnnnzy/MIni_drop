@@ -1,0 +1,25 @@
+server:
+  port: 8191
+  mode: debug
+
+database:
+  # 本地测试用 localhost，Docker 容器内用 postgres（服务名）
+  dsn: "host=localhost user=postgres password=dev dbname=drop port=5432 sslmode=disable"
+  max_open_conns: 100
+  max_idle_conns: 10
+
+grpc:
+  drop_server_addr: "localhost:50051"
+  timeout_sec: 5
+
+storage:
+  # 本地测试用 localhost，Docker 容器内用 minio（服务名）
+  endpoint: "localhost:9000"
+  access_key: "drop"
+  secret_key: "dropdrop"
+  bucket: "drop"
+  use_ssl: false
+  presign_ttl_sec: 3600
+
+log:
+  level: "debug"
