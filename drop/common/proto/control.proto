@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package control;
 
-option go_package = "minidrop/proto/control";
+option go_package = "minidrop/apiserver/proto/control";
 
 import "hotmethod.proto";
 

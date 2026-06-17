@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -9,6 +10,10 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	controlpb "minidrop/apiserver/proto/control"
+	hotmethodpb "minidrop/apiserver/proto/hotmethod"
+
+	"minidrop/apiserver/config"
 	"minidrop/apiserver/model"
 	"minidrop/apiserver/util"
 )
@@ -20,13 +25,15 @@ type CreateTaskReq struct {
 	ProfilerType int    `json:"profiler_type"` // 采集器类型
 	TargetIP     string `json:"target_ip" binding:"required"`
 	PID          int32  `json:"pid"  binding:"required"`
-	Hz           uint32 `json:"hz"`       // 采样频率，默认 99
-	Duration     uint64 `json:"duration"` // 采集时长（秒），默认 30
+	Hz           uint32 `json:"hz"`        // 采样频率，默认 99
+	Duration     uint64 `json:"duration"`  // 采集时长（秒），默认 30
 	Callgraph    string `json:"callgraph"` // fp / dwarf / lbr
 }
 
 // CreateTask POST /api/v1/tasks
-// 在数据库写一条 PENDING 任务，Day 4 才真正调 gRPC 下发给 drop_server。
+// 1. 在 DB 写一条 PENDING 任务
+// 2. 调 drop_server gRPC CreateTask 下发给 Agent
+// 3. 下发成功后把状态改为 RUNNING
 func (s *APIServer) CreateTask(c *gin.Context) {
 	var req CreateTaskReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -42,7 +49,7 @@ func (s *APIServer) CreateTask(c *gin.Context) {
 	}
 
 	uid := c.GetString("uid")
-	tid := uuid.New().String()[:8] // 短 UUID 作为任务 ID
+	tid := uuid.New().String()[:8]
 
 	paramsJSON, _ := json.Marshal(req)
 
@@ -67,14 +74,85 @@ func (s *APIServer) CreateTask(c *gin.Context) {
 
 	util.Logger.Info("task created", zap.String("tid", tid), zap.String("uid", uid))
 
-	// TODO Day 4: 调 drop_server gRPC CreateTask，下发任务给 Agent
-	// 下发成功后把 status 改为 TaskStatusRunning
+	// ── 下发给 drop_server ──────────────────────────────────────────────
+	if s.DropClient == nil {
+		// drop_server 未配置（本地调试模式），只写 DB 不下发
+		util.Logger.Warn("CreateTask: DropClient is nil, task stays PENDING", zap.String("tid", tid))
+		ok(c, gin.H{"tid": tid})
+		return
+	}
+
+	// 构建 TaskDesc（drop_server 会把它放进对应 Agent 的任务队列）
+	timeoutSec := uint32(req.Duration) + 10 // 硬超时：采集时长 + 10s 余量
+	taskDesc := &hotmethodpb.TaskDesc{
+		TaskId:       tid,
+		TaskType:     uint32(req.Type),
+		ProfilerType: uint32(req.ProfilerType),
+		SampleArgv: &hotmethodpb.RecordArgv{
+			Hz:        req.Hz,
+			Duration:  req.Duration,
+			Pid:       req.PID,
+			Callgraph: req.Callgraph,
+		},
+		TimeoutSec: timeoutSec,
+		// cos_config 留空：drop_server（InitAgentInfoService）把 MinIO 凭证下发给 Agent，
+		// Agent 用自己 config.json 里的 minio 配置上传，不依赖 TaskDesc 里的字段
+	}
+
+	grpcReq := &controlpb.CreateTaskRequest{
+		TargetIp: req.TargetIP,
+		Service:  "hotmethod",
+		TaskDesc: taskDesc,
+	}
+
+	// gRPC 超时：独立 context，不受 HTTP 请求 context 影响
+	timeoutDur := time.Duration(config.Global.GRPC.TimeoutSec) * time.Second
+	if timeoutDur <= 0 {
+		timeoutDur = 5 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDur)
+	defer cancel()
+
+	grpcResp, err := s.DropClient.CreateTask(ctx, grpcReq)
+	if err != nil {
+		util.Logger.Error("CreateTask: gRPC dispatch failed",
+			zap.String("tid", tid), zap.Error(err))
+		// 下发失败：把任务标记为 FAILED
+		s.DB.Model(&model.HotmethodTask{}).Where("tid = ?", tid).
+			Updates(map[string]interface{}{
+				"status":      TaskStatusFailed,
+				"status_info": "dispatch to drop_server failed: " + err.Error(),
+			})
+		fail(c, http.StatusBadGateway, CodeServerError, "dispatch to drop_server failed")
+		return
+	}
+	if !grpcResp.GetSuccess() {
+		msg := grpcResp.GetMessage()
+		util.Logger.Error("CreateTask: drop_server rejected task",
+			zap.String("tid", tid), zap.String("msg", msg))
+		s.DB.Model(&model.HotmethodTask{}).Where("tid = ?", tid).
+			Updates(map[string]interface{}{
+				"status":      TaskStatusFailed,
+				"status_info": "drop_server rejected: " + msg,
+			})
+		fail(c, http.StatusBadGateway, CodeServerError, "drop_server rejected: "+msg)
+		return
+	}
+
+	// 下发成功：状态改为 RUNNING
+	s.DB.Model(&model.HotmethodTask{}).Where("tid = ?", tid).
+		Updates(map[string]interface{}{
+			"status":      TaskStatusRunning,
+			"status_info": "dispatched to agent at " + req.TargetIP,
+		})
+
+	util.Logger.Info("task dispatched",
+		zap.String("tid", tid), zap.String("target_ip", req.TargetIP))
 
 	ok(c, gin.H{"tid": tid})
 }
 
 // ListTasks GET /api/v1/tasks?page=1&page_size=20
-// 返回当前用户的任务列表，按创建时间倒序分页。
 func (s *APIServer) ListTasks(c *gin.Context) {
 	uid := c.GetString("uid")
 
@@ -82,7 +160,6 @@ func (s *APIServer) ListTasks(c *gin.Context) {
 	query := s.DB.Where("uid = ? AND deleted_at IS NULL", uid).
 		Order("create_time DESC")
 
-	// 简单分页
 	page := 1
 	pageSize := 20
 	offset := (page - 1) * pageSize
@@ -98,7 +175,6 @@ func (s *APIServer) ListTasks(c *gin.Context) {
 }
 
 // GetTask GET /api/v1/tasks/:tid
-// 返回任务详情，包含 cos_key（采集结果路径）和 analysis_status。
 func (s *APIServer) GetTask(c *gin.Context) {
 	tid := c.Param("tid")
 	uid := c.GetString("uid")
@@ -113,7 +189,7 @@ func (s *APIServer) GetTask(c *gin.Context) {
 	ok(c, task)
 }
 
-// DeleteTask DELETE /api/v1/tasks/:tid  软删除（设置 deleted_at）
+// DeleteTask DELETE /api/v1/tasks/:tid  软删除
 func (s *APIServer) DeleteTask(c *gin.Context) {
 	tid := c.Param("tid")
 	uid := c.GetString("uid")
@@ -134,7 +210,6 @@ func (s *APIServer) DeleteTask(c *gin.Context) {
 }
 
 // RetryTask POST /api/v1/tasks/:tid/retry
-// 用原参数重新创建一个新任务。
 func (s *APIServer) RetryTask(c *gin.Context) {
 	tid := c.Param("tid")
 	uid := c.GetString("uid")
@@ -171,7 +246,6 @@ func (s *APIServer) RetryTask(c *gin.Context) {
 }
 
 // ListCosFiles GET /api/v1/cosfiles?tid=xxx
-// 列出任务的所有产出文件，并为每个文件生成预签名临时 URL。
 func (s *APIServer) ListCosFiles(c *gin.Context) {
 	tid := c.Query("tid")
 	if tid == "" {
@@ -196,7 +270,8 @@ func (s *APIServer) ListCosFiles(c *gin.Context) {
 	for _, key := range keys {
 		signedURL, err := s.Storage.PreSign(key, 3600)
 		if err != nil {
-			util.Logger.Warn("ListCosFiles: presign failed", zap.String("key", key), zap.Error(err))
+			util.Logger.Warn("ListCosFiles: presign failed",
+				zap.String("key", key), zap.Error(err))
 			continue
 		}
 		files = append(files, FileItem{Filename: key, URL: signedURL})

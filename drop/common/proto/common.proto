@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package drop;
 
-option go_package = "minidrop/proto/drop";
+option go_package = "minidrop/apiserver/proto/drop";
 
 // PidStats 描述一个进程在某一采样区间内的资源使用情况。
 // Agent 把自身和子进程的指标填进来，随心跳上报给 Server。

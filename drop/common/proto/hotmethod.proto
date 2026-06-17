@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package hotmethod;
 
-option go_package = "minidrop/proto/hotmethod";
+option go_package = "minidrop/apiserver/proto/hotmethod";
 
 import "common.proto";
 import "google/protobuf/empty.proto";
