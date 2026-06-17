@@ -4,6 +4,12 @@
 #include <iostream>
 #include <thread>
 
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <grpcpp/grpcpp.h>
 #include "init.grpc.pb.h"
 
@@ -16,6 +22,34 @@ namespace {
 
 std::atomic<bool> g_shutdown{false};
 void HandleSignal(int) { g_shutdown = true; }
+
+// GetLocalIP 遍历本机网卡，返回第一个非 loopback 的 IPv4 地址。
+// 找不到时回退到 "127.0.0.1"，保证 agent 不会上报 "0.0.0.0"。
+std::string GetLocalIP() {
+    struct ifaddrs* ifas = nullptr;
+    if (getifaddrs(&ifas) != 0) return "127.0.0.1";
+
+    std::string result = "127.0.0.1";
+    for (auto* ifa = ifas; ifa != nullptr; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
+        if (std::string(ifa->ifa_name) == "lo") continue; // 跳过 loopback
+        char buf[INET_ADDRSTRLEN];
+        auto* sin = reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
+        inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf));
+        result = buf;
+        break; // 取第一个非 loopback IPv4，足够 MVP 使用
+    }
+
+    freeifaddrs(ifas);
+    return result;
+}
+
+// GetHostName 读取系统 hostname，失败时返回 "unknown"。
+std::string GetHostName() {
+    char buf[256];
+    if (gethostname(buf, sizeof(buf)) != 0) return "unknown";
+    return buf;
+}
 
 // RegisterToServer 在启动时调用一次 InitAgentInfo.RegisterAgent，
 // 把自己的身份信息告知 drop_server。
@@ -67,9 +101,11 @@ int main(int argc, char** argv) {
 
     const std::string& server_addr = cfg.server_ips[0];
 
-    // TODO Day 5: 从 /etc/hostname 和网卡读取真实 host_name / ip_addr
-    const std::string host_name = "agent-host";
-    const std::string ip_addr   = "0.0.0.0";
+    // 读取真实的 host_name 和 ip_addr：这两个值会随心跳上报给 drop_server，
+    // drop_server 用 ip_addr 作为任务队列的 key——必须和 apiserver 创建任务时
+    // 填写的 target_ip 一致，否则 agent 永远取不到任务。
+    const std::string host_name = GetHostName();
+    const std::string ip_addr   = GetLocalIP();
 
     RegisterToServer(server_addr, cfg, host_name, ip_addr);
 
