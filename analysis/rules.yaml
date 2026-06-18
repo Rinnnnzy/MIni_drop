@@ -1,0 +1,32 @@
+rules:
+  - name: malloc_hotspot
+    pattern: "^(malloc|calloc|realloc|free|operator new|operator delete)"
+    suggestion: "High allocation rate detected. Consider memory pooling, reducing allocation frequency, or using arena allocators to avoid repeated heap operations."
+
+  - name: mutex_contention
+    pattern: "^(pthread_mutex|std::mutex|__lll_lock_wait|__pthread_mutex)"
+    suggestion: "Lock contention detected in the hot path. Consider finer-grained locking, lock-free data structures, or reader-writer locks to reduce serialization."
+
+  - name: memcpy_intensive
+    pattern: "^(memcpy|memmove|__memcpy|__memmove|wmemcpy)"
+    suggestion: "High memcpy overhead. Reduce data copies with C++ move semantics, zero-copy I/O, or by restructuring data layouts to avoid unnecessary copies."
+
+  - name: string_operations
+    pattern: "^(std::__cxx11::basic_string|std::string|std::basic_string)"
+    suggestion: "std::string construction in the hot path. Replace with std::string_view for read-only access, or use pre-allocated/reused string buffers."
+
+  - name: io_syscall
+    pattern: "^(read|write|pread|pwrite|fsync|fdatasync|__libc_read|__libc_write)"
+    suggestion: "I/O syscalls in the hot path. Consider buffered I/O, async I/O (io_uring), or batching multiple I/O operations to reduce syscall overhead."
+
+  - name: context_switch
+    pattern: "^(sched_yield|nanosleep|pthread_cond_wait|epoll_wait|poll|select|futex)"
+    suggestion: "Frequent blocking or yielding detected. Review synchronization patterns and consider async / non-blocking alternatives to reduce context-switch overhead."
+
+  - name: dynamic_dispatch
+    pattern: "^(vtable|__dynamic_cast)"
+    suggestion: "Virtual dispatch in the hot path. Consider replacing polymorphism with CRTP, std::variant, or static dispatch to eliminate indirect function calls."
+
+  - name: hash_operations
+    pattern: "^(std::_Hash|std::hash|__hash)"
+    suggestion: "Hash computation in the hot path. Consider a faster hash function (e.g., FNV-1a, xxHash) or switching from unordered_map to a flat/open-addressing map."

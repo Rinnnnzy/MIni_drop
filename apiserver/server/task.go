@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
+	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -149,6 +152,9 @@ func (s *APIServer) CreateTask(c *gin.Context) {
 	util.Logger.Info("task dispatched",
 		zap.String("tid", tid), zap.String("target_ip", req.TargetIP))
 
+	// Background goroutine: poll FetchData until perf.data is uploaded, then trigger analysis.
+	s.startCollectionWatcher(tid, req.Type, req.Duration)
+
 	ok(c, gin.H{"tid": tid})
 }
 
@@ -243,6 +249,106 @@ func (s *APIServer) RetryTask(c *gin.Context) {
 	}
 
 	ok(c, gin.H{"tid": newTID})
+}
+
+// startCollectionWatcher polls drop_server every 5 s until the agent uploads the
+// perf.data file (or until timeout).  On success it triggers the Python analyzer.
+func (s *APIServer) startCollectionWatcher(tid string, taskType int, durationSec uint64) {
+	if s.DropClient == nil {
+		return
+	}
+	go func() {
+		timeout := time.Duration(durationSec+120) * time.Second
+		deadline := time.Now().Add(timeout)
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			<-ticker.C
+			if time.Now().After(deadline) {
+				util.Logger.Warn("collection watcher timed out", zap.String("tid", tid))
+				s.DB.Model(&model.HotmethodTask{}).Where("tid = ?", tid).
+					Updates(map[string]interface{}{
+						"status":      TaskStatusFailed,
+						"status_info": "watcher timeout: no result within expected duration",
+					})
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			resp, err := s.DropClient.FetchData(ctx, &controlpb.FetchDataRequest{TaskId: tid})
+			cancel()
+			if err != nil {
+				continue
+			}
+
+			if resp.GetSuccess() && resp.GetCosKey() != "" {
+				now := time.Now()
+				s.DB.Model(&model.HotmethodTask{}).Where("tid = ?", tid).
+					Updates(map[string]interface{}{
+						"status":          TaskStatusDone,
+						"status_info":     "collection complete",
+						"cos_key":         resp.GetCosKey(),
+						"end_time":        now,
+						"analysis_status": AnalysisStatusPending,
+					})
+				s.triggerAnalysis(tid, taskType)
+				return
+			}
+
+			// Non-empty error that is NOT the "still running" sentinel → agent failure.
+			if errMsg := resp.GetErrorMessage(); errMsg != "" && errMsg != "task not done yet or not found" {
+				util.Logger.Error("agent reported collection failure",
+					zap.String("tid", tid), zap.String("error", errMsg))
+				s.DB.Model(&model.HotmethodTask{}).Where("tid = ?", tid).
+					Updates(map[string]interface{}{
+						"status":      TaskStatusFailed,
+						"status_info": "agent failure: " + errMsg,
+					})
+				return
+			}
+		}
+	}()
+}
+
+// triggerAnalysis marks analysis as RUNNING, then launches the Python analyzer as
+// a subprocess.  The script itself writes analysis_status=DONE/FAILED when it finishes.
+func (s *APIServer) triggerAnalysis(tid string, taskType int) {
+	s.DB.Model(&model.HotmethodTask{}).Where("tid = ?", tid).
+		Updates(map[string]interface{}{
+			"analysis_status": AnalysisStatusRunning,
+		})
+
+	python := os.Getenv("ANALYSIS_PYTHON")
+	if python == "" {
+		python = "python3"
+	}
+	script := os.Getenv("ANALYSIS_SCRIPT")
+	if script == "" {
+		script = "/app/hotmethod_analyzer.py"
+	}
+
+	go func() {
+		cmd := exec.Command(python, script,
+			"--task-id", tid,
+			"--task-type", strconv.Itoa(taskType),
+		)
+		cmd.Env = os.Environ()
+
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			util.Logger.Error("analysis script failed",
+				zap.String("tid", tid),
+				zap.String("output", string(out)),
+				zap.Error(err))
+			s.DB.Model(&model.HotmethodTask{}).Where("tid = ?", tid).
+				Updates(map[string]interface{}{
+					"analysis_status": AnalysisStatusFailed,
+				})
+			return
+		}
+		util.Logger.Info("analysis script finished", zap.String("tid", tid))
+	}()
 }
 
 // ListCosFiles GET /api/v1/cosfiles?tid=xxx
