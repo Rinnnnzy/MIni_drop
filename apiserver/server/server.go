@@ -37,21 +37,27 @@ func New(db *gorm.DB, st storage.Storage,
 
 // RegisterRoutes 把所有 HTTP 路由注册到 gin.Engine。
 func (s *APIServer) RegisterRoutes(r *gin.Engine) {
-	// 全局中间件
+	// 全局中间件：CORS 必须在最前面，否则预检请求会被鉴权中间件拦截
+	r.Use(middleware.CORS())
 	r.Use(middleware.AccessLog())
 
-	// 健康检查（不需要鉴权）
+	// 无需登录的接口
 	r.GET("/healthz", s.Healthz)
+	r.GET("/auth/check", s.CheckAuth)
 
 	// 需要登录的 API
 	api := r.Group("/api/v1", CheckLogin())
 	{
+		// 用户
+		api.GET("/users/me", s.GetMe)
+
 		// 任务相关
 		api.POST("/tasks", s.CreateTask)
 		api.GET("/tasks", s.ListTasks)
 		api.GET("/tasks/:tid", s.GetTask)
 		api.DELETE("/tasks/:tid", s.DeleteTask)
 		api.POST("/tasks/:tid/retry", s.RetryTask)
+		api.GET("/tasks/:tid/suggestions", s.GetSuggestions)
 		api.GET("/cosfiles", s.ListCosFiles)
 
 		// Agent 相关
