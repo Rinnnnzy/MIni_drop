@@ -17,6 +17,10 @@ import sys
 # Ensure sibling modules (storage, error, …) are importable regardless of cwd.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Load .env from the same directory as this script (no-op if vars already set).
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+
 import psycopg2
 
 from storage import StorageClient
@@ -56,7 +60,8 @@ def _set_analysis_status(tid: str, status: int):
 def main():
     parser = argparse.ArgumentParser(description="Mini-Drop hotmethod analyzer")
     parser.add_argument("--task-id",   required=True,  help="task TID")
-    parser.add_argument("--task-type", type=int, default=0, help="task type (unused currently)")
+    parser.add_argument("--task-type", type=int, default=0, help="task type")
+    parser.add_argument("--config",    default="",     help="config file path (unused; env vars take precedence)")
     args = parser.parse_args()
 
     tid = args.task_id
