@@ -1,5 +1,6 @@
 #include "InitAgentInfoService.h"
 
+#include <cstdlib>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -8,12 +9,22 @@
 
 namespace dropd {
 
-// NotifyApiserver 用 curl 把 Agent 注册信息 POST 到 apiserver 的内部接口，
-// 写入 agent_info 表，使前端 Agent 列表可见。
-// 采用 fork+exec curl 与 COSClient 的上传方式保持一致，不引入额外依赖。
+// getEnv returns the value of an environment variable, or def if unset/empty.
+// Used so that Docker deployments can override defaults via docker-compose env.
+static std::string getEnv(const char* name, const char* def) {
+  const char* val = ::getenv(name);
+  return (val && *val) ? std::string(val) : std::string(def);
+}
+
+// NotifyApiserver POSTs agent registration info to apiserver.
+// Uses APISERVER_URL env var (default http://localhost:8191) so the same binary
+// works both on the host (localhost) and inside Docker (http://apiserver:8191).
 static void NotifyApiserver(const std::string& hostname,
                              const std::string& ip_addr,
                              const std::string& version) {
+  std::string base_url = getEnv("APISERVER_URL", "http://localhost:8191");
+  std::string endpoint = base_url + "/internal/agent-register";
+
   std::string json =
       "{\"hostname\":\"" + hostname +
       "\",\"ip_addr\":\"" + ip_addr +
@@ -23,7 +34,7 @@ static void NotifyApiserver(const std::string& hostname,
   if (pid == 0) {
     ::execlp("curl", "curl",
              "-s", "-X", "POST",
-             "http://localhost:8191/internal/agent-register",
+             endpoint.c_str(),
              "-H", "Content-Type: application/json",
              "-d", json.c_str(),
              nullptr);
@@ -53,11 +64,14 @@ grpc::Status InitAgentInfoServiceImpl::FetchConfig(
     grpc::ServerContext* context,
     const init_svc::FetchConfigRequest* request,
     init_svc::FetchConfigResponse* response) {
+  // MinIO connection info returned to the agent.
+  // In Docker: set MINIO_ENDPOINT=minio:9000 via docker-compose environment.
+  // On host:   defaults to localhost:9000.
   drop::CosConfig* cos = response->mutable_cos_config();
-  cos->set_endpoint("localhost:9000");
-  cos->set_bucket("drop");
-  cos->set_access_key("drop");
-  cos->set_secret_key("dropdrop");
+  cos->set_endpoint(getEnv("MINIO_ENDPOINT",   "localhost:9000"));
+  cos->set_bucket(  getEnv("MINIO_BUCKET",     "drop"));
+  cos->set_access_key(getEnv("MINIO_ACCESS_KEY", "drop"));
+  cos->set_secret_key(getEnv("MINIO_SECRET_KEY", "dropdrop"));
   cos->set_use_ssl(false);
 
   response->set_success(true);

@@ -16,5 +16,6 @@ func NewStorage(cfg config.StorageConfig) (storage.Storage, error) {
 		cfg.Bucket,
 		cfg.UseSSL,
 		cfg.PresignTTLSec,
+		cfg.PresignEndpoint,
 	)
 }

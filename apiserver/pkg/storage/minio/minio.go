@@ -12,13 +12,17 @@ import (
 
 // MinIOStorage 实现 storage.Storage 接口，底层使用 MinIO。
 type MinIOStorage struct {
-	client *minio.Client
-	bucket string
-	ttlSec int // 预签名 URL 默认有效期
+	client          *minio.Client
+	bucket          string
+	ttlSec          int
+	presignEndpoint string // if non-empty, replace host in presigned URLs so browsers can reach MinIO
 }
 
 // New 初始化 MinIO 客户端并确保 bucket 存在。
-func New(endpoint, accessKey, secretKey, bucket string, useSSL bool, ttlSec int) (*MinIOStorage, error) {
+// presignEndpoint: 浏览器可访问的 MinIO 地址（如 "localhost:9000"）。
+// 在 Docker 中 endpoint 是 "minio:9000"（容器内），presignEndpoint 是 "localhost:9000"（浏览器用）。
+// 空字符串表示两者相同（本地开发时不需要区分）。
+func New(endpoint, accessKey, secretKey, bucket string, useSSL bool, ttlSec int, presignEndpoint string) (*MinIOStorage, error) {
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: useSSL,
@@ -42,7 +46,12 @@ func New(endpoint, accessKey, secretKey, bucket string, useSSL bool, ttlSec int)
 		ttlSec = 3600
 	}
 
-	return &MinIOStorage{client: client, bucket: bucket, ttlSec: ttlSec}, nil
+	return &MinIOStorage{
+		client:          client,
+		bucket:          bucket,
+		ttlSec:          ttlSec,
+		presignEndpoint: presignEndpoint,
+	}, nil
 }
 
 func (s *MinIOStorage) PutFile(key string, filePath string) error {
@@ -72,6 +81,13 @@ func (s *MinIOStorage) PreSign(key string, ttlSec int) (string, error) {
 		time.Duration(ttlSec)*time.Second, url.Values{})
 	if err != nil {
 		return "", err
+	}
+
+	// Replace internal host (e.g. minio:9000) with browser-accessible host (e.g. localhost:9000).
+	// This is necessary in Docker because the MinIO client is initialised with the internal
+	// service hostname, but browsers can only reach the host-exposed port.
+	if s.presignEndpoint != "" {
+		u.Host = s.presignEndpoint
 	}
 	return u.String(), nil
 }

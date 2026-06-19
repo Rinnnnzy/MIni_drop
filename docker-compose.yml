@@ -1,24 +1,28 @@
 version: '3.8'
 
 # ============================================================
-# Mini-Drop docker-compose
-# 第一版（Day 1）：仅包含基础存储服务
-#   - postgres  : 业务数据库
-#   - minio     : 对象存储（替代腾讯云 COS）
-#   - minio_init: 自动创建 bucket，启动一次后退出
+# Mini-Drop — 完整 docker-compose
+# 一键启动：docker compose up -d --build
 #
-# 后续各天会依次追加：
-#   Day 3 → drop_server
-#   Day 3 → drop_agent
-#   Day 4 → apiserver
-#   Day 6 → web_frontend
+# 服务启动顺序（由 depends_on + healthcheck 保证）：
+#   postgres + minio  →  minio_init
+#   minio_init done   →  drop_server
+#   drop_server up    →  apiserver + analysis + drop_agent
+#   apiserver up      →  web_frontend
+#
+# 火焰图访问：浏览器打开 http://localhost
+# MinIO 控制台：http://localhost:9001  用户名/密码：drop/dropdrop
 # ============================================================
+
+# LLM 配置从宿主机 .env 文件读取（不提交到 git）：
+#   LLM_API_KEY=sk-xxx
+#   LLM_BASE_URL=https://api.apifast.tech/v1
+#   LLM_MODEL=gemini-1.5-flash
 
 services:
 
-  # ----------------------------------------------------------
-  # PostgreSQL 14：存储所有业务数据（任务、Agent、用户）
-  # ----------------------------------------------------------
+  # ── 基础设施 ────────────────────────────────────────────────────────────────
+
   postgres:
     image: postgres:14
     environment:
@@ -28,7 +32,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pg_data:/var/lib/postgresql/data   # 数据持久化，重启不丢失
+      - pg_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d drop"]
       interval: 5s
@@ -36,10 +40,6 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # ----------------------------------------------------------
-  # MinIO：对象存储，保存 perf.data 和火焰图 SVG
-  # 管理控制台：http://localhost:9001  用户名/密码：drop/dropdrop
-  # ----------------------------------------------------------
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -47,10 +47,10 @@ services:
       MINIO_ROOT_USER: drop
       MINIO_ROOT_PASSWORD: dropdrop
     ports:
-      - "9000:9000"   # S3 API 端口（Agent 和 Analyzer 上传/下载文件用）
-      - "9001:9001"   # Web 控制台端口
+      - "9000:9000"   # S3 API — 浏览器通过 localhost:9000 访问预签名 URL
+      - "9001:9001"   # Web 控制台
     volumes:
-      - minio_data:/data                   # 数据持久化
+      - minio_data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 5s
@@ -58,10 +58,6 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # ----------------------------------------------------------
-  # minio_init：MinIO 启动后自动创建 "drop" bucket
-  # 这是一次性任务，创建完就退出（不会一直跑）
-  # ----------------------------------------------------------
   minio_init:
     image: minio/mc:latest
     depends_on:
@@ -73,12 +69,130 @@ services:
         mc mb local/drop --ignore-existing &&
         echo '[minio_init] bucket drop is ready'
       "
-    restart: on-failure   # 如果 minio 还没就绪就失败了，会自动重试
+    restart: on-failure
 
-# ----------------------------------------------------------
-# 数据卷：docker 管理的持久化存储
-# 删除容器后数据依然保留，除非手动执行 docker volume prune
-# ----------------------------------------------------------
+  # ── drop_server（gRPC 服务端）────────────────────────────────────────────────
+
+  drop_server:
+    build:
+      context: ./drop
+      dockerfile: Dockerfile
+    image: minidrop-drop:latest
+    command: ["/usr/local/bin/drop_server"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      # FetchConfig 返回给 agent 的 MinIO 地址（容器内互通用 minio:9000）
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "drop"
+      MINIO_SECRET_KEY: "dropdrop"
+      MINIO_BUCKET: "drop"
+      # NotifyApiserver 使用此地址注册 agent
+      APISERVER_URL: "http://apiserver:8191"
+    ports:
+      - "50051:50051"   # 暴露到宿主机方便调试；生产可移除
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ss -tlnp | grep -q ':50051' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # ── drop_agent（采集端）─────────────────────────────────────────────────────
+
+  drop_agent:
+    image: minidrop-drop:latest   # 与 drop_server 共用同一镜像
+    command: ["/usr/local/bin/drop_agent"]
+    depends_on:
+      drop_server:
+        condition: service_healthy
+      apiserver:
+        condition: service_healthy
+    environment:
+      APISERVER_URL: "http://apiserver:8191"
+    volumes:
+      # 挂载宿主机 /proc /sys /etc — perf 需要读取内核符号表
+      - /proc:/proc:ro
+      - /sys:/sys:ro
+      - /etc/localtime:/etc/localtime:ro
+    # --pid=host: agent 可以看到宿主机所有进程（按 PID 采集）
+    pid: "host"
+    # privileged: perf 需要 CAP_PERFMON / CAP_SYS_ADMIN，privileged 一次性授予
+    privileged: true
+    restart: unless-stopped
+
+  # ── apiserver（HTTP + gRPC 客户端）──────────────────────────────────────────
+
+  apiserver:
+    build:
+      context: ./apiserver
+      dockerfile: Dockerfile
+    image: minidrop-apiserver:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      drop_server:
+        condition: service_healthy
+    volumes:
+      # 挂载 Docker 版配置文件（使用服务名而非 localhost）
+      - ./apiserver/apiserver.yaml.example:/app/apiserver.yaml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8191/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # ── analysis（Python 分析 Worker）───────────────────────────────────────────
+
+  analysis:
+    build:
+      context: ./analysis
+      dockerfile: Dockerfile
+    image: minidrop-analysis:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      PG_DSN: "host=postgres user=postgres password=dev dbname=drop port=5432 sslmode=disable"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "drop"
+      MINIO_SECRET_KEY: "dropdrop"
+      MINIO_BUCKET: "drop"
+      MINIO_SECURE: "false"
+      # LLM 配置从宿主机 .env 读取（文件存在则生效，不存在则 AI 建议为空）
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-}"
+      LLM_MODEL: "${LLM_MODEL:-gemini-1.5-flash}"
+    # perf script 需要读取 perf.data 的内核符号（分析在容器内完成，无需 --pid=host）
+    volumes:
+      - /proc:/proc:ro
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+    privileged: true
+    restart: unless-stopped
+
+  # ── web_frontend（Nginx + React 构建产物）───────────────────────────────────
+
+  web_frontend:
+    build:
+      context: ./web_frontend
+      dockerfile: Dockerfile
+    image: minidrop-web:latest
+    depends_on:
+      apiserver:
+        condition: service_healthy
+    ports:
+      - "80:80"   # 浏览器入口：http://localhost
+    restart: unless-stopped
+
+# ── 持久化卷 ────────────────────────────────────────────────────────────────
 volumes:
   pg_data:
   minio_data:

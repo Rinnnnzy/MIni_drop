@@ -32,12 +32,13 @@ type GRPCConfig struct {
 }
 
 type StorageConfig struct {
-	Endpoint      string // MinIO 地址，例如 minio:9000
-	AccessKey     string `mapstructure:"access_key"`    // 访问密钥 ID
-	SecretKey     string `mapstructure:"secret_key"`    // 访问密钥 Secret
-	Bucket        string // 桶名，例如 drop
-	UseSSL        bool   `mapstructure:"use_ssl"`       // 是否启用 HTTPS
-	PresignTTLSec int    `mapstructure:"presign_ttl_sec"` // 预签名 URL 有效期（秒）
+	Endpoint        string // MinIO 地址，例如 minio:9000
+	PresignEndpoint string `mapstructure:"presign_endpoint"` // 浏览器可访问的地址，例如 localhost:9000；空表示与 Endpoint 相同
+	AccessKey       string `mapstructure:"access_key"`       // 访问密钥 ID
+	SecretKey       string `mapstructure:"secret_key"`       // 访问密钥 Secret
+	Bucket          string // 桶名，例如 drop
+	UseSSL          bool   `mapstructure:"use_ssl"`          // 是否启用 HTTPS
+	PresignTTLSec   int    `mapstructure:"presign_ttl_sec"`  // 预签名 URL 有效期（秒）
 }
 
 type LogConfig struct {
