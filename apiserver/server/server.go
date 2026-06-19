@@ -45,6 +45,9 @@ func (s *APIServer) RegisterRoutes(r *gin.Engine) {
 	r.GET("/healthz", s.Healthz)
 	r.GET("/auth/check", s.CheckAuth)
 
+	// 内部接口（服务间调用，不需要用户鉴权）
+	r.POST("/internal/agent-register", s.RegisterAgentInternal)
+
 	// 需要登录的 API
 	api := r.Group("/api/v1", CheckLogin())
 	{
