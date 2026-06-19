@@ -14,7 +14,7 @@ grpc:
 
 storage:
   # 本地测试用 localhost，Docker 容器内用 minio（服务名）
-  endpoint: "localhost:9000"
+  endpoint: "192.168.102.133:9000"
   access_key: "drop"
   secret_key: "dropdrop"
   bucket: "drop"
