@@ -27,7 +27,8 @@ class StorageClient:
             raise AnalysisError(ERR_STORAGE, f"download '{cos_key}' failed: {e}")
 
     def upload(self, local_path: str, cos_key: str):
+        content_type = "image/svg+xml" if cos_key.endswith(".svg") else "application/octet-stream"
         try:
-            self.client.fput_object(self.bucket, cos_key, local_path)
+            self.client.fput_object(self.bucket, cos_key, local_path, content_type=content_type)
         except S3Error as e:
             raise AnalysisError(ERR_STORAGE, f"upload '{cos_key}' failed: {e}")
