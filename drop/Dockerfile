@@ -1,6 +1,11 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM ubuntu:22.04 AS builder
 
+# 换阿里云镜像源，加速 apt-get
+RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
+            s|http://security.ubuntu.com|http://mirrors.aliyun.com|g' \
+    /etc/apt/sources.list
+
 RUN apt-get update && apt-get install -y \
     build-essential cmake git \
     libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc \
@@ -13,6 +18,10 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM ubuntu:22.04
+
+RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
+            s|http://security.ubuntu.com|http://mirrors.aliyun.com|g' \
+    /etc/apt/sources.list
 
 RUN apt-get update && apt-get install -y \
     libgrpc++1 libprotobuf23 \
@@ -27,9 +36,6 @@ RUN curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc \
 COPY --from=builder /build/build/drop_server /usr/local/bin/drop_server
 COPY --from=builder /build/build/drop_agent  /usr/local/bin/drop_agent
 
-# Agent config — endpoint values are overridden via env vars at runtime
 COPY etc/config.json.example /etc/drop/config.json
 
-# Default: start the gRPC server.
-# drop_agent uses: command: ["/usr/local/bin/drop_agent"] in docker-compose.
 CMD ["/usr/local/bin/drop_server"]
