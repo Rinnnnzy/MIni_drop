@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM ubuntu:22.04 AS builder
 
@@ -6,11 +7,15 @@ RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
             s|http://security.ubuntu.com|http://mirrors.aliyun.com|g' \
     /etc/apt/sources.list
 
-RUN apt-get update && apt-get install -y \ 
+# --mount=type=cache：apt 下载的 .deb 包缓存到 BuildKit 持久卷，
+# 不再每次重建都要重新下载，这是"每次部署都很慢"的根本修复之一。
+# 注意：不能再用 rm -rf /var/lib/apt/lists/*，否则等于清空了缓存。
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y \
     build-essential cmake git pkg-config \
     libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc \
-    nlohmann-json3-dev \
-    && rm -rf /var/lib/apt/lists/*
+    nlohmann-json3-dev
 
 WORKDIR /build
 COPY . .
@@ -23,13 +28,14 @@ RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
             s|http://security.ubuntu.com|http://mirrors.aliyun.com|g' \
     /etc/apt/sources.list
 
-RUN apt-get update && apt-get install -y \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y \
     libgrpc++1 libprotobuf23 \
     perl curl iproute2 \
     libelf1 libdw1 libunwind8 libslang2 libnuma1 \
     libtraceevent1 zlib1g liblzma5 libbz2-1.0 libexpat1 \
-    libpython3.10 \
-    && rm -rf /var/lib/apt/lists/*
+    libpython3.10
 
 # 不在镜像里装 linux-tools-generic：它会装"当前构建环境内核版本"的 perf，
 # 跟实际宿主机内核大概率不匹配，导致 perf 解析失败。

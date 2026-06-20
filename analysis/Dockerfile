@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 FROM ubuntu:22.04
 
 # 换阿里云镜像源，加速 apt-get
@@ -5,12 +6,14 @@ RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
             s|http://security.ubuntu.com|http://mirrors.aliyun.com|g' \
     /etc/apt/sources.list
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+# --mount=type=cache：apt 包缓存持久化，避免每次重建都重新下载
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     python3 python3-pip \
     perl \
     libelf1 libdw1 libunwind8 libslang2 libnuma1 \
-    libtraceevent1 zlib1g liblzma5 libbz2-1.0 libexpat1 \
-    && rm -rf /var/lib/apt/lists/*
+    libtraceevent1 zlib1g liblzma5 libbz2-1.0 libexpat1
 
 # 不装 linux-tools-generic：同 drop/Dockerfile，改为运行时挂载宿主机真实 perf 二进制
 # （HOST_PERF_PATH，见 docker-compose.yml）。上面这些 lib 是 perf 依赖的用户态共享库，
@@ -19,7 +22,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 WORKDIR /app
 COPY requirements.txt .
 
-RUN pip3 install --no-cache-dir -r requirements.txt
+# pip 缓存同样持久化，避免每次重新下载 wheel 包
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install -r requirements.txt
 
 COPY . .
 RUN chmod +x tools/flamegraph.pl tools/stackcollapse-perf.pl
