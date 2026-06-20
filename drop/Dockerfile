@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y \
     perl curl iproute2 \
     libelf1 libdw1 libunwind8 libslang2 libnuma1 \
     libtraceevent1 zlib1g liblzma5 libbz2-1.0 libexpat1 \
+    libpython3.10 \
     && rm -rf /var/lib/apt/lists/*
 
 # 不在镜像里装 linux-tools-generic：它会装"当前构建环境内核版本"的 perf，
