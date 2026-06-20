@@ -7,9 +7,12 @@ RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     python3 python3-pip \
-    linux-tools-generic linux-tools-common \
     perl \
     && rm -rf /var/lib/apt/lists/*
+
+# 不装 linux-tools-generic：perf script 解析 perf.data 时，解析器版本要尽量匹配
+# 采集时的内核版本。同 drop/Dockerfile，改为运行时挂载宿主机 /usr/bin/perf +
+# /usr/lib/linux-tools（见 docker-compose.yml analysis 服务）。
 
 WORKDIR /app
 COPY requirements.txt .

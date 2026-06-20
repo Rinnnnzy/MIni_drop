@@ -118,9 +118,21 @@ services:
       - /proc:/proc:ro
       - /sys:/sys:ro
       - /etc/localtime:/etc/localtime:ro
+      # 挂载整个 linux-tools 目录而不是写死版本号：
+      # /usr/bin/perf 在宿主机上通常是个软链接，指向 /usr/lib/linux-tools/<内核版本>/perf。
+      # 只挂 /usr/bin/perf 这一个文件的话，容器里软链接的目标路径不存在，照样跑不起来。
+      # 把整个目录结构都挂进去，软链接才能在容器里正确解析，且不用关心导师机器是什么内核版本。
+      - /usr/bin/perf:/usr/bin/perf:ro
+      - /usr/lib/linux-tools:/usr/lib/linux-tools:ro
     # --pid=host: agent 可以看到宿主机所有进程（按 PID 采集）
     pid: "host"
-    # privileged: perf 需要 CAP_PERFMON / CAP_SYS_ADMIN，privileged 一次性授予
+    # cap_add 是 perf 运行所需的最小权限集合；privileged 已经包含这些能力，
+    # 这里显式列出是为了将来想去掉 privileged 时（最小权限原则）随手就能切换。
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+    # privileged: perf 需要 CAP_PERFMON / CAP_SYS_ADMIN，privileged 一次性授予，
+    # 比逐个排查 capability 更省时间，演示截止前优先稳妥。
     privileged: true
     restart: unless-stopped
 
@@ -175,6 +187,10 @@ services:
     volumes:
       - /proc:/proc:ro
       - /sys/kernel/debug:/sys/kernel/debug:ro
+      # 同 drop_agent：挂载宿主机整个 linux-tools 目录，保证 perf script 解析器
+      # 版本与采集时的内核版本一致，不写死版本号。
+      - /usr/bin/perf:/usr/bin/perf:ro
+      - /usr/lib/linux-tools:/usr/lib/linux-tools:ro
     privileged: true
     restart: unless-stopped
 
