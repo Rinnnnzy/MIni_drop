@@ -26,12 +26,15 @@ RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
 RUN apt-get update && apt-get install -y \
     libgrpc++1 libprotobuf23 \
     perl curl iproute2 \
+    libelf1 libdw1 libunwind8 libslang2 libnuma1 \
+    libtraceevent1 zlib1g liblzma5 libbz2-1.0 libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 不在镜像里装 linux-tools-generic：它会装"当前构建环境内核版本"的 perf，
 # 跟实际宿主机内核大概率不匹配，导致 perf 解析失败。
-# 改为运行时从宿主机挂载 /usr/bin/perf + /usr/lib/linux-tools（见 docker-compose.yml），
-# 这样不管在哪台机器上跑，perf 版本永远和宿主机内核一致。
+# 改为运行时从宿主机直接挂载真实 perf 二进制（见 docker-compose.yml 的
+# HOST_PERF_PATH，启动前用 readlink -f 动态解析，不写死任何版本号）。
+# 上面这些 lib 是 perf 二进制依赖的用户态共享库，跟内核版本无关，装好后永久有效。
 
 # MinIO client (mc) — needed by drop_agent to upload perf.data
 RUN curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc \
