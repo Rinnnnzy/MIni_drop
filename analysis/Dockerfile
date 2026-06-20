@@ -1,11 +1,6 @@
 # syntax=docker/dockerfile:1.4
 FROM ubuntu:22.04
 
-# 换阿里云镜像源，加速 apt-get
-RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
-            s|http://security.ubuntu.com|http://mirrors.aliyun.com|g' \
-    /etc/apt/sources.list
-
 # --mount=type=cache：apt 包缓存持久化，避免每次重建都重新下载
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \

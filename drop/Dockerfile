@@ -2,11 +2,6 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM ubuntu:22.04 AS builder
 
-# 换阿里云镜像源，加速 apt-get
-RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
-            s|http://security.ubuntu.com|http://mirrors.aliyun.com|g' \
-    /etc/apt/sources.list
-
 # --mount=type=cache：apt 下载的 .deb 包缓存到 BuildKit 持久卷，
 # 不再每次重建都要重新下载，这是"每次部署都很慢"的根本修复之一。
 # 注意：不能再用 rm -rf /var/lib/apt/lists/*，否则等于清空了缓存。
