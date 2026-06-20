@@ -13,7 +13,16 @@ cmake-build-*/
 
 # Go
 apiserver/bin/
+apiserver/apiserver
 *.test
+*.tar.gz
+
+# C++ proto 生成代码（CMakeLists.txt 构建时会重新生成到 build/，不需要提交）
+drop/common/proto_gen/
+
+# perf 调试残留产物
+collapsed.txt
+perf.script.txt
 
 # Python
 __pycache__/
