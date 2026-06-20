@@ -2,6 +2,7 @@ package config
 
 import (
 	"log"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -51,6 +52,9 @@ var Global Config
 // Load 从 cfgFile 路径读取 YAML 配置并填充到 Global。
 func Load(cfgFile string) error {
 	viper.SetConfigFile(cfgFile)
+	// 嵌套配置项（如 storage.presign_endpoint）对应的环境变量用下划线代替点
+	// （例如 STORAGE_PRESIGN_ENDPOINT），否则 AutomaticEnv 默认不会匹配嵌套 key。
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv() // 允许用环境变量覆盖配置项
 
 	if err := viper.ReadInConfig(); err != nil {

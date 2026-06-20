@@ -149,6 +149,11 @@ services:
         condition: service_healthy
       drop_server:
         condition: service_healthy
+    environment:
+      # 覆盖 apiserver.yaml 里的 storage.presign_endpoint：浏览器和 Docker 不在同一台机器时
+      # （比如本项目这种 Windows 浏览器访问 Ubuntu 虚拟机的场景），在 .env 里设置
+      # MINIO_PRESIGN_HOST=<可访问的IP>:9000；同机场景不用设置，默认 localhost:9000。
+      STORAGE_PRESIGN_ENDPOINT: "${MINIO_PRESIGN_HOST:-localhost:9000}"
     volumes:
       # 挂载 Docker 版配置文件（使用服务名而非 localhost）
       - ./apiserver/apiserver.yaml.example:/app/apiserver.yaml:ro
