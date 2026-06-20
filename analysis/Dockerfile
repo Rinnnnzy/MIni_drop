@@ -19,8 +19,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 WORKDIR /app
 COPY requirements.txt .
 
-# 换清华 PyPI 镜像源
-RUN pip3 install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY . .
 RUN chmod +x tools/flamegraph.pl tools/stackcollapse-perf.pl
