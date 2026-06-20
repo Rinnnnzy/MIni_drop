@@ -6,15 +6,15 @@ RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g; \
             s|http://security.ubuntu.com|http://mirrors.aliyun.com|g' \
     /etc/apt/sources.list
 
-RUN apt-get update && apt-get install -y \
-    build-essential cmake git \
+RUN apt-get update && apt-get install -y \ 
+    build-essential cmake git pkg-config \
     libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc \
     nlohmann-json3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 COPY . .
-RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)
+RUN rm -rf build && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM ubuntu:22.04
