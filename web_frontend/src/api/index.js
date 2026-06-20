@@ -46,3 +46,4 @@ export const listCosFiles  = (tid)  => request.get('/api/v1/cosfiles', { params:
 
 // ── Agents ────────────────────────────────────────────────────────────────
 export const listAgents = () => request.get('/api/v1/agents')
+export const listAgentAuditLog = () => request.get('/api/v1/agents/audit-log')

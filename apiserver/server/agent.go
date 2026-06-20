@@ -48,8 +48,21 @@ func (s *APIServer) StatAgent(c *gin.Context) {
 	})
 }
 
+// ListAgentAuditLog GET /api/v1/agents/audit-log
+// 返回 Agent 上线/离线审计记录，按时间倒序，最多 100 条。
+func (s *APIServer) ListAgentAuditLog(c *gin.Context) {
+	var logs []model.AgentAuditLog
+	if err := s.DB.Order("created_at DESC").Limit(100).Find(&logs).Error; err != nil {
+		util.Logger.Error("ListAgentAuditLog: db error", zap.Error(err))
+		fail(c, http.StatusInternalServerError, CodeServerError, "db error")
+		return
+	}
+	ok(c, gin.H{"logs": logs})
+}
+
 // RegisterAgentInternal POST /internal/agent-register
-// drop_server 在 Agent 注册时调用，把 Agent 信息写入 agent_info 表。
+// drop_server 在 Agent 首次注册、以及之后每次收到心跳时都会调用，
+// 用于把 Agent 信息和最新心跳时间同步到 agent_info 表。
 // 不需要用户鉴权，只在内部网络使用。
 func (s *APIServer) RegisterAgentInternal(c *gin.Context) {
 	var req struct {
@@ -65,6 +78,8 @@ func (s *APIServer) RegisterAgentInternal(c *gin.Context) {
 	now := time.Now()
 	var agent model.AgentInfo
 	result := s.DB.Where("ip_addr = ?", req.IPAddr).First(&agent)
+	wasOffline := result.Error != nil || !agent.Online // 新建 或 之前离线，都算一次"上线"事件
+
 	if result.Error != nil {
 		// 首次注册：新建
 		agent = model.AgentInfo{
@@ -89,8 +104,50 @@ func (s *APIServer) RegisterAgentInternal(c *gin.Context) {
 		})
 	}
 
+	if wasOffline {
+		s.DB.Create(&model.AgentAuditLog{
+			IPAddr:   req.IPAddr,
+			Hostname: req.Hostname,
+			Event:    "online",
+			Detail:   "agent registered/recovered",
+		})
+	}
+
 	util.Logger.Info("agent registered",
 		zap.String("ip", req.IPAddr),
 		zap.String("host", req.Hostname))
+	ok(c, gin.H{"ok": true})
+}
+
+// RegisterAgentOffline POST /internal/agent-offline
+// drop_server 的心跳扫描线程检测到某 Agent 超过 30s 无心跳时调用，
+// 把该 Agent 标记离线并写入审计日志，供 Web 端 Agent 列表展示。
+// 不需要用户鉴权，只在内部网络使用。
+func (s *APIServer) RegisterAgentOffline(c *gin.Context) {
+	var req struct {
+		Hostname string `json:"hostname"`
+		IPAddr   string `json:"ip_addr" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, CodeBadRequest, err.Error())
+		return
+	}
+
+	result := s.DB.Model(&model.AgentInfo{}).Where("ip_addr = ?", req.IPAddr).
+		Update("online", false)
+	if result.Error != nil {
+		util.Logger.Error("RegisterAgentOffline: db error", zap.Error(result.Error))
+		fail(c, http.StatusInternalServerError, CodeServerError, "db error")
+		return
+	}
+
+	s.DB.Create(&model.AgentAuditLog{
+		IPAddr:   req.IPAddr,
+		Hostname: req.Hostname,
+		Event:    "offline",
+		Detail:   "no heartbeat for over 30s (reported by drop_server)",
+	})
+
+	util.Logger.Warn("agent marked offline", zap.String("ip", req.IPAddr))
 	ok(c, gin.H{"ok": true})
 }

@@ -253,15 +253,20 @@ func (s *APIServer) RetryTask(c *gin.Context) {
 
 // startCollectionWatcher polls drop_server every 5 s until the agent uploads the
 // perf.data file (or until timeout).  On success it triggers the Python analyzer.
+// 状态迁移：RUNNING -[采集时长到]-> UPLOADING -[FetchData 成功]-> DONE
 func (s *APIServer) startCollectionWatcher(tid string, taskType int, durationSec uint64) {
 	if s.DropClient == nil {
 		return
 	}
 	go func() {
+		start := time.Now()
+		collectDeadline := start.Add(time.Duration(durationSec) * time.Second)
 		timeout := time.Duration(durationSec+120) * time.Second
-		deadline := time.Now().Add(timeout)
+		deadline := start.Add(timeout)
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+
+		uploadingMarked := false
 
 		for {
 			<-ticker.C
@@ -273,6 +278,18 @@ func (s *APIServer) startCollectionWatcher(tid string, taskType int, durationSec
 						"status_info": "watcher timeout: no result within expected duration",
 					})
 				return
+			}
+
+			// 采集时长已到但还没收到上传完成通知 → Agent 正在把 perf.data 传到 MinIO。
+			// 只在还处于 RUNNING 时迁移，避免覆盖已经 FAILED/DONE 的任务。
+			if !uploadingMarked && time.Now().After(collectDeadline) {
+				uploadingMarked = true
+				s.DB.Model(&model.HotmethodTask{}).
+					Where("tid = ? AND status = ?", tid, TaskStatusRunning).
+					Updates(map[string]interface{}{
+						"status":      TaskStatusUploading,
+						"status_info": "collection finished, uploading to storage",
+					})
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

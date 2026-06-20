@@ -8,7 +8,7 @@ poll_worker.py — Docker 部署模式下的 analysis 触发器。
   每 5 秒轮询 DB，找到"采集完成但未分析"的任务，调用 hotmethod_analyzer.py。
 
 轮询条件：
-  status = 2 (collection done) AND analysis_status IN (0, 3)
+  status = 3 (collection done) AND analysis_status IN (0, 3)
   0 = pending (apiserver 写完 cos_key 后设置)
   3 = failed  (apiserver 的 triggerAnalysis goroutine exec 失败后设置)
   二者都是"需要分析"的状态。
@@ -41,8 +41,9 @@ _A_RUNNING = 1
 _A_DONE    = 2
 _A_FAILED  = 3
 
-# hotmethod_task.status: 2 = collection complete, perf.data uploaded
-_TASK_DONE = 2
+# hotmethod_task.status: 3 = collection complete, perf.data uploaded
+# (0=pending 1=running 2=uploading 3=done 4=failed — apiserver/server/const_enum.go)
+_TASK_DONE = 3
 
 
 def _get_pending(conn):

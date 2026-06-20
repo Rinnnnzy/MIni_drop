@@ -5,8 +5,9 @@ package server
 const (
 	TaskStatusPending   = 0 // 新建，尚未下发给 Agent
 	TaskStatusRunning   = 1 // 已下发，Agent 正在采集
-	TaskStatusDone      = 2 // 采集成功，文件已上传存储
-	TaskStatusFailed    = 3 // 采集失败或超时
+	TaskStatusUploading = 2 // 采集时长已到，Agent 正在上传文件到存储
+	TaskStatusDone      = 3 // 上传完成，文件已落地存储
+	TaskStatusFailed    = 4 // 采集失败或超时
 )
 
 // 分析状态（hotmethod_task.analysis_status）

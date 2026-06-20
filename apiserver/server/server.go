@@ -47,6 +47,7 @@ func (s *APIServer) RegisterRoutes(r *gin.Engine) {
 
 	// 内部接口（服务间调用，不需要用户鉴权）
 	r.POST("/internal/agent-register", s.RegisterAgentInternal)
+	r.POST("/internal/agent-offline", s.RegisterAgentOffline)
 
 	// 需要登录的 API
 	api := r.Group("/api/v1", CheckLogin())
@@ -66,6 +67,7 @@ func (s *APIServer) RegisterRoutes(r *gin.Engine) {
 		// Agent 相关
 		api.GET("/agents", s.ListAgents)
 		api.GET("/agent/stat", s.StatAgent)
+		api.GET("/agents/audit-log", s.ListAgentAuditLog)
 	}
 }
 

@@ -47,6 +47,7 @@ func main() {
 		&model.Group{},
 		&model.GroupMember{},
 		&model.AnalysisSuggestion{},
+		&model.AgentAuditLog{},
 	); err != nil {
 		log.Fatalf("auto migrate failed: %v", err)
 	}
@@ -85,6 +86,7 @@ func main() {
 
 	s := server.New(db, st, dropConn, dropClient)
 	s.RegisterRoutes(r)
+	s.StartHeartbeatWatchdog()
 
 	// 8. 启动 HTTP 服务
 	addr := fmt.Sprintf(":%d", config.Global.Server.Port)

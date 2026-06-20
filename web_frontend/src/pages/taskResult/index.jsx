@@ -13,8 +13,9 @@ const { Content } = Layout
 const STATUS_MAP = {
   0: { text: '待处理', color: 'default' },
   1: { text: '采集中', color: 'processing' },
-  2: { text: '完成',   color: 'success' },
-  3: { text: '失败',   color: 'error' },
+  2: { text: '上传中', color: 'processing' },
+  3: { text: '完成',   color: 'success' },
+  4: { text: '失败',   color: 'error' },
 }
 
 const ANALYSIS_MAP = {
@@ -54,12 +55,12 @@ export default function TaskResult() {
 
   // 采集完成后拉火焰图
   useEffect(() => {
-    if (task?.status === 2) fetchFlamegraph()
+    if (task?.status === 3) fetchFlamegraph()
   }, [task?.status])
 
-  // 轮询：任务未完成时每 3 秒刷新
+  // 轮询：任务未完成时每 3 秒刷新（status: 0 待处理/1 采集中/2 上传中 都需要继续轮询）
   useEffect(() => {
-    if (!task || task.status >= 2) return
+    if (!task || task.status >= 3) return
     const id = setInterval(() => {
       fetchTask()
       if (task.analysis_status < 2) fetchSuggestions()
@@ -113,7 +114,7 @@ export default function TaskResult() {
     {
       key: 'flamegraph',
       label: '火焰图',
-      children: task.status < 2
+      children: task.status < 3
         ? <Alert message={`任务${STATUS_MAP[task.status]?.text}，火焰图生成后自动显示`} type="info" showIcon style={{ margin: '24px 0' }} />
         : <Flamegraph url={flamegraphUrl} />,
     },

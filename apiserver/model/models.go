@@ -31,6 +31,18 @@ type AgentInfo struct {
 
 func (AgentInfo) TableName() string { return "agent_info" }
 
+// AgentAuditLog 记录 Agent 上线/离线事件，供 Web 审计追溯。
+type AgentAuditLog struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement"         json:"id"`
+	IPAddr    string    `gorm:"column:ip_addr;not null;index"    json:"ip_addr"`
+	Hostname  string    `gorm:"column:hostname"                  json:"hostname"`
+	Event     string    `gorm:"column:event;not null"            json:"event"` // "online" / "offline"
+	Detail    string    `gorm:"column:detail"                    json:"detail"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+}
+
+func (AgentAuditLog) TableName() string { return "agent_audit_log" }
+
 type HotmethodTask struct {
 	ID             uint           `gorm:"primaryKey;autoIncrement"                 json:"id"`
 	TID            string         `gorm:"column:tid;uniqueIndex;not null"           json:"tid"`
