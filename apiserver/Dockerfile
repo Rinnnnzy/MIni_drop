@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.4
 FROM golang:1.25 AS builder
 
-# 使用官方 Go 模块代理（VPN 环境下比国内镜像更稳定，避免两者路由冲突）
-ENV GOPROXY=https://proxy.golang.org,direct
+# 换国内 Go 代理，加速 go mod download
+ENV GOPROXY=https://goproxy.cn,direct
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -18,6 +18,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=linux go build -o apiserver ./main.go
 
 FROM alpine:3.19
+
+# 换阿里云 Alpine 镜像源
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories
 
 RUN apk add --no-cache ca-certificates tzdata wget
 
