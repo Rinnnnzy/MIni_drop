@@ -9,6 +9,8 @@ demo:
 	@echo "Creating demo task..."
 	@curl -sf -X POST http://localhost:8191/api/v1/tasks \
 		-H "Content-Type: application/json" \
+		-H "Drop_user_uid: demo-user" \
+		-H "Drop_user_name: demo-user" \
 		-d '{"name":"demo","type":0,"profilerType":0,"targetIP":"127.0.0.1","pid":1,"duration":10,"hz":99}' \
 		| python3 -m json.tool || true
 	@echo ""

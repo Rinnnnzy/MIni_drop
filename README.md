@@ -150,9 +150,14 @@ docker compose logs -f analysis
 | API Server | http://localhost:8191 |
 | MinIO 控制台 | http://localhost:9001（用户名/密码：drop / dropdrop） |
 
+> **在虚拟机里跑 Docker、用 Windows/Mac 主机浏览器访问的场景，请注意：**
+> - **在虚拟机内部**（虚拟机自己的终端/浏览器）打开：直接用 `http://localhost` 即可。
+> - **在 Windows/Mac 主机**（跑 Docker 的虚拟机之外）打开：`localhost` 对主机浏览器来说指的是主机自己，不是虚拟机，必须改用**虚拟机的真实 IP**，例如 `http://192.168.x.x`。在虚拟机里执行 `hostname -I` 可以查到这个 IP。
+> - 这种"浏览器和 Docker 不在同一台机器"的场景下，还需要在 `.env` 里设置 `MINIO_PRESIGN_HOST=<虚拟机IP>:9000`，否则火焰图无法加载（详见上方"环境要求"和下方"常见问题"）。
+
 ### 使用说明
 
-1. 打开 http://localhost；本项目未实现账号密码登录，登录页只需输入一个用户名（用于标识身份，写入 cookie），无需注册、无需密码
+1. 打开 Web 前端地址（虚拟机内部用 `http://localhost`，虚拟机外部主机用虚拟机 IP，见上方说明）；本项目未实现账号密码登录，登录页只需输入一个用户名（用于标识身份，写入 cookie），无需注册、无需密码
 2. 在主页确认 Agent 列表中出现在线 Agent
 3. 点击「新建任务」，填写目标进程 PID（可用 `ps aux` 查找）、采样时长（建议 30s）、采样率（建议 99 Hz）
 4. 等待任务状态变为「DONE」（约 30~60 秒）
