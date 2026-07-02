@@ -1,4 +1,4 @@
-# Mini-Drop
+<img width="2498" height="1224" alt="屏幕截图 2026-07-02 203723" src="https://github.com/user-attachments/assets/69dd2ad0-99cf-40d4-8843-415a0674619c" /><img width="2498" height="1224" alt="屏幕截图 2026-07-02 203723" src="https://github.com/user-attachments/assets/bb0ecf96-1af5-446b-b183-d7d20a6006bc" /><img width="2524" height="1196" alt="屏幕截图 2026-07-02 203438" src="https://github.com/user-attachments/assets/2d60ab89-cb23-4c39-b99c-9666090e4fdd" /># Mini-Drop
 
 > 一个分布式 Linux 性能采集与分析平台，支持按需对目标进程进行 CPU 热点分析、火焰图生成与智能归因建议。
 
@@ -24,18 +24,22 @@ Mini-Drop 复刻自腾讯内部性能分析平台 Drop，具备完整的"采集 
 <!-- 截图：登录页面 -->
 
 <!-- 截图：主页 Agent 列表 + 任务列表 -->
+<img width="2511" height="1209" alt="屏幕截图 2026-07-02 203404" src="https://github.com/user-attachments/assets/c93ecfdf-b0fc-40bd-9a4c-c24e6a1cd69d" />
 
 ### 创建采集任务
 
 <!-- 截图：新建任务弹窗，填写 PID / 采样时长 / 采样率 -->
+<img width="2524" height="1196" alt="屏幕截图 2026-07-02 203438" src="https://github.com/user-attachments/assets/ac625876-73df-4e16-beb5-351774047f46" />
 
 ### 火焰图展示
 
 <!-- 截图：任务结果页 - 火焰图 Tab -->
+<img width="2498" height="1209" alt="屏幕截图 2026-07-02 203506" src="https://github.com/user-attachments/assets/a05798e5-4111-4872-b374-26f7703b0f37" />
 
 ### 智能归因建议
 
 <!-- 截图：任务结果页 - 分析建议 Tab，规则建议 + AI 建议 -->
+![Uploading 屏幕截图 2026-07-02 203723.png…]()
 
 ---
 
