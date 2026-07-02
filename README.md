@@ -37,7 +37,8 @@ Mini-Drop 复刻自腾讯内部性能分析平台 Drop，具备完整的"采集 
 ### 智能归因建议
 
 <!-- 截图：任务结果页 - 分析建议 Tab，规则建议 + AI 建议 -->
-![Uploading 屏幕截图 2026-07-02 203723.png…]()
+<img width="2498" height="1224" alt="屏幕截图 2026-07-02 203723" src="https://github.com/user-attachments/assets/8e41cf0f-d458-49c5-90fb-e9155b381386" />
+
 
 ---
 
