@@ -1,5 +1,3 @@
-<img width="2498" height="1224" alt="屏幕截图 2026-07-02 203723" src="https://github.com/user-attachments/assets/69dd2ad0-99cf-40d4-8843-415a0674619c" /><img width="2498" height="1224" alt="屏幕截图 2026-07-02 203723" src="https://github.com/user-attachments/assets/bb0ecf96-1af5-446b-b183-d7d20a6006bc" /><img width="2524" height="1196" alt="屏幕截图 2026-07-02 203438" src="https://github.com/user-attachments/assets/2d60ab89-cb23-4c39-b99c-9666090e4fdd" /># Mini-Drop
-
 > 一个分布式 Linux 性能采集与分析平台，支持按需对目标进程进行 CPU 热点分析、火焰图生成与智能归因建议。
 
 ---
